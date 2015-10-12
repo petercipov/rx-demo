@@ -29,6 +29,22 @@
     overflow: hidden;
 }
 
+.coin {
+    display: block;
+    position: absolute;
+    width: 90px;
+    height: 90px;
+    background-size: 90px 90px;
+    background-image: url("http://www.elisanet.fi/arigrafix/images/roman_coin.gif");
+}
+
+.counter {
+    font-size: 40px;
+    color: white;
+    text-align: right;
+    padding: 10px;
+}
+
 body {
     margin: 0;
 }
