@@ -172,9 +172,7 @@ function createGame(targetEl, soundEfects) {
             return ++accumulator;
         }, 0)
 
-        .subscribe(function(accumulator) {
-            renderCounter(accumulator);
-        })
+        .subscribe(renderCounter)
     ;
 }
 
