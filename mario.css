@@ -1,0 +1,34 @@
+.mario {
+    width: 90px;
+    height: 90px;
+    position: absolute;
+    bottom: 65px;
+    left: 40px;
+    z-index: 10;
+    background-image: url("http://s1.postimg.org/i1rau36i7/888.gif");
+    background-size: 90px 90px;
+    background-repeat: no-repeat;
+}
+
+.ground {
+    position: absolute;
+    left: 0px;
+    bottom: 0px;
+    width: 100%;
+    height: 70px;
+    background-image: url("http://www.matim-dev.com/uploads/1/5/8/0/15804842/7477761_orig.png");
+    z-index: 9;
+    overflow: hidden;
+}
+
+.canvas {
+    position: relative;
+    height: 500px;
+    background-image: url("http://i1205.photobucket.com/albums/bb425/Braydon_SFX/BackgroundSkyFinalLook.jpg");
+    background-size: cover;
+    overflow: hidden;
+}
+
+body {
+    margin: 0;
+}
