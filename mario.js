@@ -7,40 +7,43 @@ function createGame(targetEl, soundEfects) {
     '</div>';
 
      var
-        coinTick = Rx.Observable.interval(3000),
-        frameTick = Rx.Observable.interval(33),
+        frameTick = bindAnimationFrame(33),
+        userClick = bindClick();
         ground = targetEl.querySelector(".ground"),
         mario = targetEl.querySelector(".mario"),
         canvas = targetEl.querySelector(".canvas"),
         counter = targetEl.querySelector(".counter"),
         GROUND_OFFSET = 65,
-        currentMario = {},
         gainedCoins = new Rx.BehaviorSubject();
     ;
 
     // ------- PHYSICS -------
-    function groundPhysics(i) {
-        return (i % 120) * -8;
+    function groundPhysics(oldGround, t) {
+        var g = Object.create(oldGround);
+
+        g.x = (oldGround.x  + (t.dt / 100 * (-20))) % 120;
+
+        return g;
     }
 
-    function marioPhysics(oldMario, clicks) {
+    function marioPhysics(oldMario, actions) {
         var m = Object.create(oldMario);
         
         //apply velocity
-        m.x += m.vx;
-        m.y += m.vy;
+        m.x += actions.t.dt * m.vx / 100;
+        m.y += actions.t.dt * m.vy / 100;
         
         //apply gravity
-        m.vy -= 0.98
+        m.vy -= actions.t.dt * 0.98 / 100
         
         //when hit ground stop
         if (m.vy < 0 && m.y <= GROUND_OFFSET) {
             m.y = GROUND_OFFSET;
             m.vy = 0;
         }
-        
+        debugger;
         //if click add velocity
-        if (clicks.length != 0) {
+        if (actions.clicked) {
             //add velocity only on ground
             if (m.y === GROUND_OFFSET) {
                 m.bounced = true;
@@ -53,7 +56,7 @@ function createGame(targetEl, soundEfects) {
         return m;
     }
 
-    function coinPhysics(oldCoin, m) {
+    function coinPhysics(oldCoin, actions) {
         var c = Object.create(oldCoin);
 
         if (c.gained || c.removing) {
@@ -61,7 +64,7 @@ function createGame(targetEl, soundEfects) {
              c.removing = true;
              c.gained = false;
         } else {
-            if (isCrossing(c, m)) {
+            if (isCrossing(c, actions.m)) {
                 c.gained  = true;
                 c.vy = 1.5;
             } else {
@@ -69,8 +72,8 @@ function createGame(targetEl, soundEfects) {
             }
         }
 
-        c.x += c.vx;
-        c.y += c.vy;
+        c.x += actions.t.dt * c.vx / 100;
+        c.y += actions.t.dt * c.vy / 100;
         
         return c;
     }
@@ -86,11 +89,14 @@ function createGame(targetEl, soundEfects) {
     }
 
     //------- RENDERERS ----------
-    function renderGround(x) {
-        ground.style.backgroundPositionX = x +"px";
+    function renderGround(g) {
+        ground.style.backgroundPositionX = g.x +"px";
     }
 
     function renderMario(m) {
+        if (m.bounced) {
+            soundEfects.jump.play();
+        }
         m.node.style.left = Math.floor(m.x) + "px";
         m.node.style.bottom = Math.floor(m.y)  + "px";
     }
@@ -114,6 +120,7 @@ function createGame(targetEl, soundEfects) {
     }
 
     function renderCounter(value) {
+        soundEfects.coinGain.play();
         counter.innerHTML = ''+value;
     }
 
@@ -130,44 +137,121 @@ function createGame(targetEl, soundEfects) {
         return !(n.x < -300 || n.y < -1000 || n.y > 1000)
     }
 
+    function bindAnimationFrame(maxFps) {
+        var idCounter = 0;
+        var observers = {};
+        var animationLoop;
+        var timeThreshold = 1000 / maxFps;
+
+        var animationObservable = Rx.Observable.create(function (observer) {
+
+            var first = Object.keys(observers).length === 0;
+                
+            var id = "id_"+(idCounter++);
+            observers[id] = observer;
+
+            if (first) {
+                animationLoop(0);
+            }
+            
+            return function () { delete observers[id]; };
+        })
+        .scan(function(acc, now) {
+            var last = acc.last ? acc.last : acc.now;
+            var dt = now - last;
+            if (dt > timeThreshold) {
+                return  {now: now, dt: dt};
+            } else {
+                return  {last: last, now: now};
+            }
+        }, {last: 0, now: 0})
+        .filter(function(t) {
+            return t.dt !== undefined;
+        })
+        .share()
+        ;
+
+        animationLoop = function(timestamp){
+            var keys = Object.keys(observers);
+
+            if (keys.length === 0) {
+                return;
+            }
+            
+            keys.forEach(function (key) {
+                observers[key].onNext(timestamp);
+            });
+
+            requestAnimationFrame(animationLoop);
+        };
+
+        return animationObservable;
+    }
+
     //------ PIPES ---------
     frameTick
-        .map(groundPhysics)
+        .scan(groundPhysics, {x:0})
         .subscribe(renderGround);
 
-    bindClick()
-        .buffer(frameTick)
-        .scan(marioPhysics, {x:30, y:GROUND_OFFSET, vx:0, vy:0, node: mario })
-        .doOnNext(function(m) {
-            if (m.bounced) {
-                soundEfects.jump.play();
+    var marioMovement = frameTick
+        .merge(userClick.buffer(frameTick))
+        .scan(function(oldEffects, element) {
+            var newEffects = Object.create(oldEffects);
+
+            if (element.dt === undefined) {
+                newEffects.clicked = element.length > 0;
+            } else {
+                newEffects.t = element;
             }
-            currentMario = m;
-        })
+
+            return newEffects;
+        }, {})
+        .filter(function(effects) { return effects.t !== undefined && effects.clicked !== undefined; })
+        .scan(marioPhysics, {x:30, y:GROUND_OFFSET, vx:0, vy:0, node: mario })
+        .share()
+        ;
+
+    marioMovement
         .subscribe(renderMario);
 
-    coinTick
-        .map(createDomCoin)
-        .flatMap(function(node) {
-                
+    frameTick
+        .scan(function(acc, t) {
+           if (acc > 3000) {
+                return 0;
+           }
+           return acc + t.dt;
+            
+        }, 0)
+        .filter(function(t) { return t > 3000 })
+        .flatMap(function() {
+
+            var node = createDomCoin();
+
             return frameTick
-                .map(function() {return currentMario; })
-                .scan(coinPhysics, {x: targetEl.clientWidth, y: 250, vx: -6, vy:0, node: node})
-                .doOnNext(function(c) {
-                    if (c.gained) {
-                        gainedCoins.onNext(c);
+                .merge(marioMovement)
+                .scan(function(oldEffects, element) {
+                    var newEffects = Object.create(oldEffects);
+                    if (element.dt === undefined) {
+                        newEffects.m = element;
+                    } else {
+                        newEffects.t = element;
                     }
-                })
+                    return newEffects;
+                }, {})
+                .filter(function(effects) { return effects.m !== undefined && effects.t !== undefined; })
+                .scan(coinPhysics, {x: targetEl.clientWidth, y: 250, vx: -6, vy:0, node: node})
                 .takeWhile(onScreen)
                 .doOnCompleted(function() { deleteDomCoin(node); });
+        })
+        .doOnNext(function(c) {
+            if (c.gained) {
+                gainedCoins.onNext(c);
+            }
         })
         .subscribe(renderCoin);
 
     gainedCoins
         .skip(1)
-        .doOnNext(function(m) {
-            soundEfects.coinGain.play();
-        })
         .scan(function(accumulator, c) {
             return ++accumulator;
         }, 0)
