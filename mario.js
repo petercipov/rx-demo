@@ -7,8 +7,8 @@ function createGame(targetEl, soundEfects) {
     '</div>';
 
      var
-        frameTick = bindAnimationFrame(33),
-        userClick = bindClick();
+        frameTick = bindAnimationFrame(33).share(),
+        userClick = bindClick().share();
         ground = targetEl.querySelector(".ground"),
         mario = targetEl.querySelector(".mario"),
         canvas = targetEl.querySelector(".canvas"),
