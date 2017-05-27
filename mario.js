@@ -19,7 +19,7 @@ function createGame(targetEl, soundEfects) {
 
     // ------- PHYSICS -------
     function groundPhysics(oldGround, t) {
-        var g = Object.create(oldGround);
+        var g = Object.assign({}, oldGround);
 
         g.x = (oldGround.x  + (t.dt / 100 * (-20))) % 120;
 
@@ -27,7 +27,7 @@ function createGame(targetEl, soundEfects) {
     }
 
     function marioPhysics(oldMario, actions) {
-        var m = Object.create(oldMario);
+        var m = Object.assign({}, oldMario);
         
         //apply velocity
         m.x += actions.t.dt * m.vx / 100;
@@ -57,7 +57,7 @@ function createGame(targetEl, soundEfects) {
     }
 
     function coinPhysics(oldCoin, actions) {
-        var c = Object.create(oldCoin);
+        var c = Object.assign({}, oldCoin);
 
         if (c.gained || c.removing) {
              c.vy = 7 * c.vy;
@@ -196,7 +196,7 @@ function createGame(targetEl, soundEfects) {
     var marioMovement = frameTick
         .merge(userClick.buffer(frameTick))
         .scan(function(oldEffects, element) {
-            var newEffects = Object.create(oldEffects);
+            var newEffects = Object.assign({}, oldEffects);
 
             if (element.dt === undefined) {
                 newEffects.clicked = element.length > 0;
@@ -230,7 +230,7 @@ function createGame(targetEl, soundEfects) {
             return frameTick
                 .merge(marioMovement)
                 .scan(function(oldEffects, element) {
-                    var newEffects = Object.create(oldEffects);
+                    var newEffects = Object.assign({}, oldEffects);
                     if (element.dt === undefined) {
                         newEffects.m = element;
                     } else {
