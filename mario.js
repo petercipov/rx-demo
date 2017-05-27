@@ -7,8 +7,8 @@ function createGame(targetEl, soundEfects) {
     '</div>';
 
      var
-        frameTick = bindAnimationFrame(33).share(),
-        userClick = bindClick().share();
+        frameTick = bindAnimationFrame(33),
+        userClick = bindClick()
         ground = targetEl.querySelector(".ground"),
         mario = targetEl.querySelector(".mario"),
         canvas = targetEl.querySelector(".canvas"),
@@ -41,7 +41,6 @@ function createGame(targetEl, soundEfects) {
             m.y = GROUND_OFFSET;
             m.vy = 0;
         }
-        debugger;
         //if click add velocity
         if (actions.clicked) {
             //add velocity only on ground
@@ -101,23 +100,39 @@ function createGame(targetEl, soundEfects) {
         m.node.style.bottom = Math.floor(m.y)  + "px";
     }
 
-    function renderCoin(c) {
-        c.node.style.visibility = "visible";
-        c.node.style.left = Math.floor(c.x) + "px";
-        c.node.style.bottom = Math.floor(c.y) + "px";
-    }
+    var _getID = function() {
+        var counter = 0;
+        return () => counter++;
+    }();
 
-    function createDomCoin() {
-        var node = document.createElement("div");
-        node.className = 'coin';
-        node.style.visibility = "hidden";
-        canvas.appendChild(node);
-        return node;
-    }
+    var coins = new (function() {
+        var domObjects = {};
+        this.create = () => {
+            var id = _getID();
+            var node = document.createElement("div");
+            node.className = 'coin';
+            node.style.visibility = "hidden";
+            canvas.appendChild(node);
+            domObjects[id] = node;
+            return id;
+        };
 
-    function deleteDomCoin(node) {
-        canvas.removeChild(node);
-    }
+        this.render = (c) => {
+            var obj = domObjects[c.id];
+            obj.style.visibility = "visible";
+            obj.style.left = Math.floor(c.x) + "px";
+            obj.style.bottom = Math.floor(c.y) + "px";
+            return c.id;
+        };
+
+        this.remove = (id) => {
+            var obj = domObjects[id];
+            canvas.removeChild(obj);
+            delete domObjects[id];
+            return id;
+        };
+
+    })();
 
     function renderCounter(value) {
         soundEfects.coinGain.play();
@@ -127,9 +142,7 @@ function createGame(targetEl, soundEfects) {
     //------ INPUTS ------------
     function bindClick() {
         var s = new Rx.Subject();
-        targetEl.onclick = function (e) {
-            s.onNext(e);
-        }; 
+        targetEl.onclick = (e) => s.onNext(e);
         return s;
     }
 
@@ -143,7 +156,7 @@ function createGame(targetEl, soundEfects) {
         var animationLoop;
         var timeThreshold = 1000 / maxFps;
 
-        var animationObservable = Rx.Observable.create(function (observer) {
+        var animationObservable = Rx.Observable.create((observer) => {
 
             var first = Object.keys(observers).length === 0;
                 
@@ -154,9 +167,9 @@ function createGame(targetEl, soundEfects) {
                 animationLoop(0);
             }
             
-            return function () { delete observers[id]; };
+            return () => delete observers[id];
         })
-        .scan(function(acc, now) {
+        .scan((acc, now) => {
             var last = acc.last ? acc.last : acc.now;
             var dt = now - last;
             if (dt > timeThreshold) {
@@ -165,22 +178,17 @@ function createGame(targetEl, soundEfects) {
                 return  {last: last, now: now};
             }
         }, {last: 0, now: 0})
-        .filter(function(t) {
-            return t.dt !== undefined;
-        })
-        .share()
-        ;
+        .filter((t) => t.dt !== undefined )
+        .share();
 
-        animationLoop = function(timestamp){
+        animationLoop = (timestamp) => {
             var keys = Object.keys(observers);
 
             if (keys.length === 0) {
                 return;
             }
             
-            keys.forEach(function (key) {
-                observers[key].onNext(timestamp);
-            });
+            keys.forEach((key) => observers[key].onNext(timestamp));
 
             requestAnimationFrame(animationLoop);
         };
@@ -195,7 +203,7 @@ function createGame(targetEl, soundEfects) {
 
     var marioMovement = frameTick
         .merge(userClick.buffer(frameTick))
-        .scan(function(oldEffects, element) {
+        .scan((oldEffects, element) => {
             var newEffects = Object.assign({}, oldEffects);
 
             if (element.dt === undefined) {
@@ -206,56 +214,47 @@ function createGame(targetEl, soundEfects) {
 
             return newEffects;
         }, {})
-        .filter(function(effects) { return effects.t !== undefined && effects.clicked !== undefined; })
+        .filter((effects) => effects.t !== undefined && effects.clicked !== undefined)
         .scan(marioPhysics, {x:30, y:GROUND_OFFSET, vx:0, vy:0, node: mario })
-        .share()
-        ;
+        .share();
 
     marioMovement
         .subscribe(renderMario);
 
+    function createCoin(id) {
+        return frameTick
+            .merge(marioMovement)
+            .scan((oldEffects, element) => {
+                var newEffects = Object.assign({}, oldEffects);
+                if (element.dt === undefined) {
+                    newEffects.m = element;
+                } else {
+                    newEffects.t = element;
+                }
+                return newEffects;
+            }, {})
+            .filter((effects) => effects.m !== undefined && effects.t !== undefined )
+            .scan(coinPhysics, {x: targetEl.clientWidth, y: 250, vx: -6, vy:0, id: id})
+            .takeWhile(onScreen)
+    }
+
     frameTick
-        .scan(function(acc, t) {
-           if (acc > 3000) {
-                return 0;
-           }
-           return acc + t.dt;
-            
-        }, 0)
-        .filter(function(t) { return t > 3000 })
-        .flatMap(function() {
-
-            var node = createDomCoin();
-
-            return frameTick
-                .merge(marioMovement)
-                .scan(function(oldEffects, element) {
-                    var newEffects = Object.assign({}, oldEffects);
-                    if (element.dt === undefined) {
-                        newEffects.m = element;
-                    } else {
-                        newEffects.t = element;
-                    }
-                    return newEffects;
-                }, {})
-                .filter(function(effects) { return effects.m !== undefined && effects.t !== undefined; })
-                .scan(coinPhysics, {x: targetEl.clientWidth, y: 250, vx: -6, vy:0, node: node})
-                .takeWhile(onScreen)
-                .doOnCompleted(function() { deleteDomCoin(node); });
+        .scan((acc, t) => acc > 3000 ? 0 : acc + t.dt, 0)
+        .filter((t) => t > 3000 )
+        .flatMap(() => {
+            var id = coins.create();
+            return createCoin(id).doOnCompleted(() => coins.remove(id))
         })
-        .doOnNext(function(c) {
+        .doOnNext((c) => {
             if (c.gained) {
                 gainedCoins.onNext(c);
             }
         })
-        .subscribe(renderCoin);
+        .subscribe(coins.render);
 
     gainedCoins
         .skip(1)
-        .scan(function(accumulator, c) {
-            return ++accumulator;
-        }, 0)
-
+        .scan((acc, c) => ++acc, 0)
         .subscribe(renderCounter)
     ;
 }
