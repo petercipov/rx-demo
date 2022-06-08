@@ -21,7 +21,7 @@ function createGame(targetEl, soundEfects) {
     function groundPhysics(oldGround, t) {
         var g = Object.assign({}, oldGround);
 
-        g.x = (oldGround.x  + (t.dt / 100 * (-20))) % 120;
+        g.x = (oldGround.x  + (t.dt / 100 * (-20))) % 270;
 
         return g;
     }
